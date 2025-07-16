@@ -1,0 +1,1 @@
+This repository contains the data collected during a testing of a novel camera trapping method to detect goshawks, Accipiter gentilis, in the UK. The effect of various convariates on the detection probabaility were tested using occupancy models in the "unmarked" package. 
