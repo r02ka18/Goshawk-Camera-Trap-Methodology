@@ -1,0 +1,142 @@
+---
+title: "Camera Trap Methodology"
+author: "Katie August"
+date: "17/06/2021"
+output: html_document
+  toc: true
+  toc_float: true
+  number_sections: true
+---
+
+
+
+
+# Required Packages
+```{r required packages, message=FALSE}
+library(unmarked)
+library(MuMIn)
+library(ggplot2)
+```
+
+# Load in the data
+```{r load data}
+encounters <- read.csv("Encounter histories.csv", header = TRUE)
+
+site_covariates <- read.csv("Site covariates cameras.csv", header = TRUE) # contains difficulty and sex
+
+posts <- read.csv("Posts cameras.csv", header = TRUE)
+
+height <- read.csv("Height cameras.csv", header = TRUE)
+
+kill <- read.csv("Fresh kill cameras.csv", header = TRUE)
+
+check <- read.csv("Check numbers cameras.csv", header = TRUE)
+col_names <- names(check)
+check[,col_names] <- lapply(check[,col_names] , as.character)
+
+
+```
+
+## Setup umf
+```{r create umf}
+encounters_names <- encounters[,2:19]
+
+obs_covariates <- list(posts = posts,
+                       height = height,
+                       kill = kill,
+                       check = check)
+
+umf <- unmarkedMultFrame(y = encounters_names, siteCovs = site_covariates, obsCovs = obs_covariates, numPrimary = 3)
+
+summary(umf)
+```
+# Fit an occupancy model
+```{r null model}
+model_Null <- colext(psiformula = ~1,
+                     gammaformula = ~1,
+                     epsilonformula = ~1,
+                     pformula = ~1,
+                     data = umf)
+model_Null
+```
+
+# Add covariates
+```{r full model}
+model_Full <- colext(psiformula = ~1,
+                     gammaformula = ~1,
+                     epsilonformula = ~1,
+                     pformula = ~ check + Sex + Difficulty + height + posts + kill,
+                     data = umf)
+
+model_Full
+```
+```{r dredge models}
+modelList <- dredge(model_Full, 
+                    rank = "AIC")
+
+modelList
+```
+
+Best models all contain check, sex and difficulty. Need to back transform to get estimates.
+
+```{r best model}
+model_best <- colext(psiformula = ~1,
+                     gammaformula = ~1,
+                     epsilonformula = ~1,
+                     pformula = ~ check + Sex + Difficulty + height,
+                     data = umf)
+
+model_best
+```
+
+## Predict values
+
+```{r predict values}
+difficulty <- c("Easy", "Easy","Easy","Easy","Easy","Easy","Hard","Hard","Hard","Hard","Hard","Hard")
+
+heights <- c("L", "L","L","L","L","L","L","L","L","L","L","L","L","L","L","L","L","L","L","L","L","L","L","L","M","M", "M", "M", "M", "M", "M", "M", "M", "M", "M", "M", "M", "M", "M", "M", "M", "M", "M", "M", "M", "M", "M", "M", "H", "H", "H", "H", "H", "H", "H", "H", "H", "H", "H", "H", "H", "H", "H", "H", "H", "H", "H", "H", "H", "H", "H", "H")
+
+nd <- data.frame(check = rep(1:6, times = 12), Sex = rep(0:1, each = 12, times = 6), Difficulty = rep(difficulty, 12), height = heights)
+
+predict_detection <- predict(model_best, type = "det", newdata = nd)
+
+predict_detection
+
+output <- cbind(nd, predict_detection)
+```
+
+# Plot predicted values
+
+```{r plot}
+output$Sex <- as.factor(output$Sex)
+
+output$height <- factor(output$height, levels = c("L", "M", "H"))
+
+plot_output <- ggplot(output, aes(check, Predicted)) +
+                  geom_point(aes(color = Sex)) +
+                  geom_line(aes(color = Sex, group = Sex, linetype = Sex), size = 1) +
+                  facet_wrap(Difficulty ~ height) +
+                  geom_errorbar(aes(ymin = lower, ymax = upper, color = Sex), width = 0.3, size = 1) +
+                  theme(axis.text = element_text(size = 10),
+                        axis.title = element_text(size = 18),
+                        legend.title = element_text(size = 18),
+                        legend.text = element_text(size = 10),
+                        legend.background = element_rect(fill = "darkgray"),
+                        strip.text.x = element_text(size = 14)) +
+                  scale_color_manual(values = c("green4", "purple4"), labels = c("Male", "Female")) +
+                  scale_shape_discrete(name = "Sex", labels = c("Male", "Female")) +
+                  scale_linetype_discrete(name = "Sex", labels = c("Male", "Female")) +
+                  labs(x = "Check",
+                       y = "Detection Probability") +
+                  scale_x_continuous(breaks = seq(1, 6, by = 1)) +
+                  scale_y_continuous(breaks = seq(0, 1, by = 0.25))
+
+
+plot_output
+```
+
+
+```{r save plot, echo = FALSE}
+ggsave("Detection Probabilities 2019-21.jpeg", plot = plot_output, width = 10, height = 8)
+```
+
