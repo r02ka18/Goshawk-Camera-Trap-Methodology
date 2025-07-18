@@ -4,6 +4,8 @@
 library(unmarked)
 library(MuMIn)
 library(ggplot2)
+library(tidyr)
+
 
 # Load in the data
 encounters <- read.csv("Data/Encounter histories anonymised.csv", header = TRUE)
@@ -115,3 +117,41 @@ plot_output
 
 
 ggsave("Plots/Detection Probabilities 2019-21 for publication.jpeg", plot = plot_output, width = 15, height = 10, dpi = 300)
+
+
+## Plots for paper
+detections <- colSums(encounters[,2:19], na.rm = TRUE)
+cameras_detections <- data.frame(check = colnames(encounters[,2:19]),
+                                 active_cameras = NA,
+                                detections = detections)
+
+
+for (i in 1:length(colnames(encounters[,2:19]))) {
+  survey <- encounters[, i+1]
+  cameras <- survey[!is.na(survey)]
+  cameras_detections$active_cameras[i] <- length(cameras)/2
+}
+
+cameras_detections_long <- cameras_detections %>% 
+  pivot_longer(
+    cols = 2:3, 
+    names_to = "cameras.detections",
+    values_to = "value"
+  )  
+
+  
+cameras_detections_plot <- ggplot(cameras_detections_long, aes(x = as.factor(check), y = value)) +
+  geom_bar(aes(fill = factor(cameras.detections)), stat = "identity", position = "dodge") +
+  scale_fill_manual(values = c("forestgreen", "purple"), labels = c("Number of active Cameras", "Number of detections")) +
+  theme_classic() +
+  theme(axis.text = element_text(size = 10),
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+        axis.title = element_text(size = 18),
+        legend.title = element_text(size = 18),
+        legend.text = element_text(size = 10)) +
+  labs(x = "Survey and Check",
+       y = "Count") +
+  guides(fill=guide_legend(title="Legend"))
+  
+
+cameras_detections_plot
